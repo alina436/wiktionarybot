@@ -33,7 +33,6 @@ async def send_current_definition(ctx, sess):
         return
 
     msg = (
-        f"_ _\n"
         f"**{word}** ({pos}{gender_text.get(gender, '')}) [{i+1}/{len(defs)}]\n"
         f"{defs[i]}\n"
     )
@@ -103,7 +102,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         key = session_key(ctx)
         DEFINE_SESSIONS[key] = {
             "word": word,
-            "pos": chosen_pos,
+            "pos": base_pos,
             "defs": defs,
             "i": 0,
             "lang": lang,

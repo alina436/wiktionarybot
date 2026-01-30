@@ -36,9 +36,17 @@ TAXFMT_RE = re.compile(r"\{\{taxfmt\|([^|}]+)(?:\|[^}]*)?\}\}")
 TEMPLATE_RE = re.compile(r"\{\{[^{}]*\}\}")
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 FR_GENDER_RE = re.compile(r"\{\{\s*(m|f|mf)\s*\}\}", re.IGNORECASE)
+FR_LABEL_RE = re.compile(
+    r"\{\{\s*(vulgaire|injurieux|familier|péjoratif|argot|ironique|vieilli)\s*\|\s*fr\s*\}\}",
+    re.IGNORECASE
+)
 
-def extract_french_gender(pos_wikitext: str) -> Optional[str]:
-    # Only scan the top to avoid false matches
-    top = "\n".join(pos_wikitext.splitlines()[:20])
-    m = FR_GENDER_RE.search(top)
-    return m.group(1).lower() if m else None
+FR_LABEL_MAP = {
+    "vulgaire": "[vulgaire]",
+    "injurieux": "[injurieux]",
+    "familier": "[familier]",
+    "péjoratif": "[péjoratif]",
+    "argot": "[argot]",
+    "ironique": "[ironique]",
+    "vieilli": "[vieilli]",
+}

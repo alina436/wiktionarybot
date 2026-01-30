@@ -2,7 +2,7 @@
 import re
 from typing import Optional
 
-from config import FR_GENDER_RE, LINK_RE, LIEN_FR_RE, TAXFMT_RE, TEMPLATE_RE, HTML_TAG_RE, LANG_CONFIG
+from config import FR_GENDER_RE, FR_LABEL_RE, LINK_RE, LIEN_FR_RE, TAXFMT_RE, TEMPLATE_RE, HTML_TAG_RE, LANG_CONFIG, FR_LABEL_MAP
 
 def normalize_lang(s: Optional[str]) -> Optional[str]:
     if not s:
@@ -43,6 +43,11 @@ def clean_wikitext_line(s: str) -> str:
         if m.group(2):
             return m.group(2)
         return m.group(1) or m.group(3) or ""
+    
+    def label_repl(m):
+        return FR_LABEL_MAP.get(m.group(1).lower(), "")
+
+    s = FR_LABEL_RE.sub(label_repl, s)
 
     s = LINK_RE.sub(link_repl, s)
 
@@ -65,6 +70,11 @@ def clean_wikitext_line(s: str) -> str:
         return ""
     if s in {".", "-", "–"}:
         return ""
+    
+    # FINAL CLEANUP
+    s = re.sub(r"\s+([.,;:!?])", r"\1", s)
+    s = re.sub(r"\.\s*\.", ".", s)
+    s = re.sub(r"\s+", " ", s).strip()
 
     return s
 
