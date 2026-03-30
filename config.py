@@ -14,7 +14,7 @@ LANG_CONFIG = {
             "adjective": "Adjective", "adj": "Adjective", "a": "Adjective",
             "adverb": "Adverb", "adv": "Adverb",
         },
-        "fallback": ["Noun", "Verb", "Adjective", "Adverb"],
+        "fallback": ["Adjective", "Noun", "Verb", "Adverb", "Prepositional phrase"],
     },
     "fr": {
         "api": "https://fr.wiktionary.org/w/api.php",

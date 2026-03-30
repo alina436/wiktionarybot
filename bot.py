@@ -7,10 +7,12 @@ from discord.ext import commands
 
 from config import LANG_CONFIG
 from wiktionary_client import get_sections, fetch_section_wikitext
-from parse import normalize_lang, normalize_pos, find_language_pos_section_index, extract_definition_lines, extract_french_gender
+from parse import normalize_lang, normalize_pos, find_language_pos_section_index, extract_definition_lines, extract_french_gender, strip_html
 
 intents = discord.Intents.default()
 intents.message_content = True
+
+debug = False
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
@@ -76,8 +78,25 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
                 break
 
         if not chosen_idx:
-            await ctx.send(f"No {cfg['lang_header']} definitions found for **{word}**.")
-            return
+            in_lang = False
+            for s in sections:
+                line = strip_html(s.get("line", ""))
+                level = str(s.get("level") or "")
+                idx = s.get("index")
+
+                if level == "2":
+                    in_lang = (line.lower() == cfg["lang_header"].lower())
+                    continue
+
+                if not in_lang:
+                    continue
+
+                # any level 3-5 section under language counts as a POS section
+                if level in {"3", "4", "5"}:
+                    chosen_pos = line  # keep actual header text
+                    chosen_idx = idx
+                    break
+
 
         pos_wikitext = fetch_section_wikitext(word, chosen_idx, cfg["api"])
         gender = None
@@ -85,7 +104,11 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         if lang == "fr" and base_pos == "nom commun":
             gender = extract_french_gender(pos_wikitext)
 
-        lines = extract_definition_lines(pos_wikitext, max_defs=50)
+        lines = extract_definition_lines(pos_wikitext, lang=lang, max_defs=50)
+
+        if debug:
+            print(f"DEBUG: pos_wikitext for {word} ({chosen_pos}):\n{pos_wikitext}\n")
+            print(f"DEBUG: extracted lines:\n{lines}\n")
 
         defs = []
         for ln in lines:
@@ -113,7 +136,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
 
     except Exception as e:
         print("DEFINE ERROR:", repr(e), flush=True)
-        await ctx.send("Error while fetching/parsing. Check bot logs.")
+        await ctx.send("Error while fetching/parsing")
 
 @define.error
 async def define_error(ctx, error):

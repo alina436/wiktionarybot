@@ -78,20 +78,30 @@ def clean_wikitext_line(s: str) -> str:
 
     return s
 
-def extract_definition_lines(pos_wikitext: str, max_defs: int = 8) -> list[str]:
+def extract_definition_lines(pos_wikitext: str, lang, max_defs: int = 8) -> list[str]:
     out = []
     for raw in pos_wikitext.splitlines():
         line = raw.strip()
 
+        # Skip headers
+        if re.match(r"^=+[^=]+=+$", line):
+            continue
+
+        # Only handle # lines
         if line.startswith("# "):
-            cleaned = clean_wikitext_line(line[2:].strip())
+            content = line[2:].strip()
+
+            if lang == "en":
+                # English templates
+                m = re.match(r"\{\{(alternative form of|plural of|past of|present participle of|third-person singular of|synonym of)\|en\|([^}]+)\}\}", content)
+                if m:
+                    out.append("- " + m.group(2).strip())
+                    continue
+
+            # fallback
+            cleaned = clean_wikitext_line(content)
             if cleaned:
                 out.append("- " + cleaned)
-
-        elif line.startswith("## "):
-            cleaned = clean_wikitext_line(line[3:].strip())
-            if cleaned:
-                out.append("  - " + cleaned)
 
         if len(out) >= max_defs:
             break
