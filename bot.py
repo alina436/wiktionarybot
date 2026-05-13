@@ -2,6 +2,8 @@
 import os
 import time
 from typing import Optional
+import logging
+import re
 
 import aiohttp
 import discord
@@ -23,31 +25,12 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # key: (guild_id, channel_id)
 DEFINE_SESSIONS: dict = {}
 
-# bot.py
-import os
-import time
-from typing import Optional
-
-import aiohttp
-import discord
-from discord.ext import commands, tasks
-
-from config import LANG_CONFIG
-from wiktionary_client import get_sections, fetch_section_wikitext, set_session
-from parse import normalize_lang, normalize_pos, find_language_pos_section_index, extract_definition_lines, extract_french_gender, strip_html
-
-intents = discord.Intents.default()
-intents.message_content = True
-
-debug = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
-
-SESSION_TTL = 3600  # seconds — drop a session after 1 hour of inactivity
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-# key: (guild_id, channel_id)
-DEFINE_SESSIONS: dict = {}
-
+logging.basicConfig(
+    level=logging.DEBUG if debug else logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("bot")
 
 # ── Lifecycle ──────────────────────────────────────────────────────────────────
 
@@ -77,7 +60,7 @@ async def prune_sessions():
     for k in stale:
         del DEFINE_SESSIONS[k]
     if stale:
-        print(f"Pruned {len(stale)} stale define session(s)", flush=True)
+        log.info("Pruned %d stale session(s)", len(stale))
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -172,8 +155,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         lines = extract_definition_lines(pos_wikitext, lang=lang, max_defs=50)
 
         if debug:
-            print(f"DEBUG pos_wikitext for {word} ({chosen_pos}):\n{pos_wikitext}\n")
-            print(f"DEBUG extracted lines:\n{lines}\n")
+            log.debug("pos_wikitext for %r (%s):\n%s", word, chosen_pos, pos_wikitext)
 
         defs = []
         for ln in lines:
@@ -201,7 +183,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         await send_current_definition(ctx, DEFINE_SESSIONS[key])
 
     except Exception as e:
-        print("DEFINE ERROR:", repr(e), flush=True)
+        log.exception("Error in !define for word=%r", word)
         await ctx.send("Error while fetching/parsing.")
 
 @define.error
@@ -226,6 +208,28 @@ async def next(ctx):
         await ctx.send("*(Back to the first definition.)*")
 
     await send_current_definition(ctx, sess)
+
+@bot.command()
+@commands.is_owner()
+async def raw(ctx, lang_or_word: str, word_or_none: Optional[str] = None):
+    """Fetch and display raw wikitext for a word — for debugging parse issues."""
+    maybe_lang = normalize_lang(lang_or_word)
+    if maybe_lang and word_or_none:
+        lang, word = maybe_lang, word_or_none
+    else:
+        lang, word = "en", lang_or_word
+
+    cfg = LANG_CONFIG[lang]
+    try:
+        sections = await get_sections(word, cfg["api"])
+        section_list = "\n".join(
+            f"[{s['index']}] L{s['level']} {strip_html(s.get('line',''))}"
+            for s in sections
+        )
+        await ctx.send(f"**Sections for '{word}':**\n```\n{section_list[:1800]}\n```")
+    except Exception:
+        log.exception("!raw failed for %r", word)
+        await ctx.send("Failed to fetch sections.")
 
 
 token = os.environ.get("DISCORD_TOKEN")
