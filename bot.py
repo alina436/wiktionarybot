@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands, tasks
 
 from config import LANG_CONFIG, gender_text
-from wiktionary_client import get_sections, fetch_section_wikitext
+from wiktionary_client import get_sections, fetch_section_wikitext, set_session
 from parse import normalize_lang, normalize_pos, find_language_pos_section_index, extract_definition_lines, extract_french_gender, strip_html
 
 intents = discord.Intents.default()
