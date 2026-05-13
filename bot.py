@@ -66,7 +66,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         cfg = LANG_CONFIG[lang]
         requested_pos = normalize_pos(pos_raw, cfg)
 
-        sections = get_sections(word, cfg["api"])
+        sections = await get_sections(word, cfg["api"])
 
         pos_try_order = [requested_pos] if requested_pos else cfg["fallback"]
 
@@ -100,11 +100,11 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
                     break
 
 
-        pos_wikitext = fetch_section_wikitext(word, chosen_idx, cfg["api"])
+        pos_wikitext = await fetch_section_wikitext(word, chosen_idx, cfg["api"])
         gender = None
         base_pos = (chosen_pos or "").lower().rstrip(" 0123456789")
         if lang == "fr" and base_pos == "nom commun":
-            gender = extract_french_gender(pos_wikitext)
+            gender = await extract_french_gender(pos_wikitext)
 
         lines = extract_definition_lines(pos_wikitext, lang=lang, max_defs=50)
 
@@ -160,6 +160,27 @@ async def next(ctx):
 
     sess["i"] = (sess["i"] + 1) % len(sess["defs"])
     await send_current_definition(ctx, sess)
+
+@bot.command()
+@commands.is_owner()
+async def raw(ctx, lang_or_word: str, word_or_none: Optional[str] = None):
+    """Fetch and display raw wikitext for a word — for debugging parse issues."""
+    maybe_lang = normalize_lang(lang_or_word)
+    if maybe_lang and word_or_none:
+        lang, word = maybe_lang, word_or_none
+    else:
+        lang, word = "en", lang_or_word
+
+    cfg = LANG_CONFIG[lang]
+    try:
+        sections = await get_sections(word, cfg["api"])
+        section_list = "\n".join(
+            f"[{s['index']}] L{s['level']} {strip_html(s.get('line',''))}"
+            for s in sections
+        )
+        await ctx.send(f"**Sections for '{word}':**\n```\n{section_list[:1800]}\n```")
+    except Exception:
+        await ctx.send("Failed to fetch sections.")
 
 token = os.environ.get("DISCORD_TOKEN")
 if not token:
