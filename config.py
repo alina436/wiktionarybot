@@ -50,3 +50,5 @@ FR_LABEL_MAP = {
     "ironique": "[ironique]",
     "vieilli": "[vieilli]",
 }
+
+gender_text = {"m": ", masculin", "f": ", féminin"}
