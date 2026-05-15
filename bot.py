@@ -225,6 +225,8 @@ async def all(ctx):
         return
 
     word = sess["word"]
+    sec_label = sess["pos"]
+    gender = sess.get("gender")
     gender_text = {"m": ", masculin", "f": ", féminin"}
     flat = session_defs(sess)
 
@@ -232,11 +234,10 @@ async def all(ctx):
         await ctx.send("Session has no definitions.")
         return
 
-    header = f"**{word}** — all {len(flat)} definition(s):\n"
+    header = f"**{word}** ({sec_label}{gender_text.get(gender, '')})\n"
     lines = []
     for i, (sec_label, gender, d) in enumerate(flat):
-        g = gender_text.get(gender, "")
-        lines.append(f"**{i+1}.** ({sec_label}{g}) {d}")
+        lines.append(f"{i+1}. {d}")
 
     numbered = "\n".join(lines)
     msg = header + numbered

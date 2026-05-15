@@ -83,7 +83,7 @@ def clean_wikitext_line(s: str) -> str:
         return m.group(1) or m.group(3) or ""
     
     def label_repl(m):
-        return FR_LABEL_MAP.get(m.group(1).lower(), "")
+        return f"({m.group(1)})"
 
     s = FR_LABEL_RE.sub(label_repl, s)
 

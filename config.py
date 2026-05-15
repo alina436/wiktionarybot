@@ -37,7 +37,7 @@ TEMPLATE_RE = re.compile(r"\{\{[^{}]*\}\}")
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 FR_GENDER_RE = re.compile(r"\{\{\s*(m|f|mf)\s*\}\}", re.IGNORECASE)
 FR_LABEL_RE = re.compile(
-    r"\{\{\s*(vulgaire|injurieux|familier|péjoratif|argot|ironique|vieilli)\s*\|\s*fr\s*\}\}",
+    r"\{\{\s*([^|{}]+?)\s*\|\s*fr\s*\}\}",
     re.IGNORECASE
 )
 
