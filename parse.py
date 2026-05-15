@@ -19,24 +19,62 @@ def strip_html(s: str) -> str:
     return HTML_TAG_RE.sub("", s or "").strip()
 
 def find_language_pos_section_index(sections, lang_header: str, pos_header: str):
+    """Original — returns a single index for exact match (used for English and non-noun POS)."""
     in_lang = False
-
     for s in sections:
         line = strip_html(s.get("line", ""))
         level = str(s.get("level") or "")
         idx = s.get("index")
-
         if level == "2":
             in_lang = (line.lower() == lang_header.lower())
             continue
-
         if not in_lang:
             continue
-
         if level in {"3", "4", "5"} and line.lower() == pos_header.lower():
             return idx
-
     return None
+
+def find_language_pos_section_indices(sections, lang_header: str, pos_header: str) -> list[tuple[str, str]]:
+    """New — returns (header_text, index) tuples for all numbered variants (used for French nouns)."""
+    in_lang = False
+    results = []
+    for s in sections:
+        line = strip_html(s.get("line", ""))
+        level = str(s.get("level") or "")
+        idx = s.get("index")
+        if level == "2":
+            in_lang = (line.lower() == lang_header.lower())
+            continue
+        if not in_lang:
+            continue
+        if level in {"3", "4", "5"} and re.match(
+            rf"^{re.escape(pos_header.lower())}(\s+\d+)?$", line.lower()
+        ):
+            results.append((line, idx))
+    return results
+
+def build_french_noun_sections(section_wikitexts: list[tuple[str, str]], max_defs: int = 50) -> list[dict]:
+    """
+    Takes [(header_text, wikitext), ...] and returns
+    [{"section": ..., "gender": ..., "defs": [...]}, ...]
+    """
+    results = []
+    for header, wikitext in section_wikitexts:
+        lines = extract_definition_lines(wikitext, "fr", max_defs)
+        header =  re.sub(r'\d+', '', header).strip() # remove numbering from header names
+        defs = []
+        for ln in lines:
+            ln = ln.strip()
+            if ln.startswith("- "):
+                defs.append(ln[2:].strip())
+            elif ln.startswith("  - "):
+                defs.append(ln[4:].strip())
+        results.append({
+            "section": header.lower(),
+            "gender": extract_french_gender(wikitext),
+            "defs": defs,
+        })
+    return results
 
 def clean_wikitext_line(s: str) -> str:
     def link_repl(m):
@@ -56,6 +94,10 @@ def clean_wikitext_line(s: str) -> str:
 
     # English taxonomic names
     s = TAXFMT_RE.sub(r"\1", s)
+    
+    # references
+    s = re.sub(r"<ref[^>]*>.*?</ref>", "", s, flags=re.DOTALL)
+    s = re.sub(r"<ref[^>]*/>", "", s)
 
     # remove remaining templates
     for _ in range(3):

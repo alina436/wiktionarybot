@@ -25,7 +25,7 @@ LANG_CONFIG = {
             "adjective": "Adjectif", "adj": "Adjectif", "a": "Adjectif",
             "adverb": "Adverbe", "adv": "Adverbe",
         },
-        "fallback": ["Nom commun", "Verbe", "Adjectif", "Adverbe"],
+        "fallback": ["Nom commun", "Verbe", "Adjectif", "Adverbe", ],
     },
 }
 

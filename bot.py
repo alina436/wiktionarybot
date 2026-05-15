@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from config import LANG_CONFIG
 from wiktionary_client import get_sections, fetch_section_wikitext
-from parse import normalize_lang, normalize_pos, find_language_pos_section_index, extract_definition_lines, extract_french_gender, strip_html
+from parse import normalize_lang, normalize_pos, find_language_pos_section_index, find_language_pos_section_indices, extract_definition_lines, extract_french_gender, strip_html, build_french_noun_sections
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -24,18 +24,46 @@ DEFINE_SESSIONS = {}
 def session_key(ctx):
     return (getattr(ctx.guild, "id", None), ctx.channel.id)
 
+def session_defs(sess):
+    """Flat list of (section_label, gender, def_text) for any session type."""
+    if "fr_sections" in sess:
+        out = []
+        for sec in sess["fr_sections"]:
+            for d in sec["defs"]:
+                out.append((sec["section"], sec.get("gender"), d))
+        return out
+    gender = sess.get("gender")
+    return [(sess["pos"], gender, d) for d in sess.get("defs", [])]
+
 async def send_current_definition(ctx, sess):
-    i = sess["i"]
-    defs = sess["defs"]
     word = sess["word"]
     pos = sess["pos"]
-    gender = sess.get("gender")
+    i = sess["i"]
     gender_text = {"m": ", masculin", "f": ", féminin"}
 
-    if not defs:
+    if "fr_sections" in sess:
+        offset = 0
+        for sec in sess["fr_sections"]:
+            sec_defs = sec["defs"]
+            if i < offset + len(sec_defs):
+                local_i = i - offset
+                gender = sec.get("gender")
+                total = sum(len(s["defs"]) for s in sess["fr_sections"])
+                msg = (
+                    f"**{word}** ({sec['section']}{gender_text.get(gender, '')}) [{i+1}/{total}]\n"
+                    f"{sec_defs[local_i]}\n"
+                )
+                await ctx.send(msg)
+                return
+            offset += len(sec_defs)
         await ctx.send(f"No definitions stored for **{word}** ({pos}).")
         return
 
+    defs = sess["defs"]
+    gender = sess.get("gender")
+    if not defs:
+        await ctx.send(f"No definitions stored for **{word}** ({pos}).")
+        return
     msg = (
         f"**{word}** ({pos}{gender_text.get(gender, '')}) [{i+1}/{len(defs)}]\n"
         f"{defs[i]}\n"
@@ -69,74 +97,103 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         sections = await get_sections(word, cfg["api"])
 
         pos_try_order = [requested_pos] if requested_pos else cfg["fallback"]
+        
+        # --- POS resolution ---
+        is_fr_noun = lang == "fr" and any(
+            (normalize_pos(p, cfg) or p).lower().rstrip(" 0123456789") == "nom commun"
+            for p in pos_try_order
+        )
 
+        fr_sections = None
         chosen_pos = None
         chosen_idx = None
-        for p in pos_try_order:
-            idx = find_language_pos_section_index(sections, cfg["lang_header"], p)
-            if idx:
-                chosen_pos = p
-                chosen_idx = idx
-                break
 
-        if not chosen_idx:
+        if is_fr_noun:
+            for p in pos_try_order:
+                matches = find_language_pos_section_indices(sections, cfg["lang_header"], p)
+                if matches:
+                    chosen_pos = p
+                    section_wikitexts = [
+                        (header, await fetch_section_wikitext(word, idx, cfg["api"]))
+                        for header, idx in matches
+                    ]
+                    fr_sections = build_french_noun_sections(section_wikitexts, max_defs=50)
+                    break
+        else:
+            for p in pos_try_order:
+                idx = find_language_pos_section_index(sections, cfg["lang_header"], p)
+                if idx:
+                    chosen_pos = p
+                    chosen_idx = idx
+                    break
+
+        # --- Fallback: any POS section under the language ---
+        if not fr_sections and not chosen_idx:
             in_lang = False
             for s in sections:
                 line = strip_html(s.get("line", ""))
                 level = str(s.get("level") or "")
                 idx = s.get("index")
-
                 if level == "2":
                     in_lang = (line.lower() == cfg["lang_header"].lower())
                     continue
-
                 if not in_lang:
                     continue
-
-                # any level 3-5 section under language counts as a POS section
                 if level in {"3", "4", "5"}:
-                    chosen_pos = line  # keep actual header text
+                    chosen_pos = line
                     chosen_idx = idx
                     break
 
-
-        pos_wikitext = await fetch_section_wikitext(word, chosen_idx, cfg["api"])
-        gender = None
-        base_pos = (chosen_pos or "").lower().rstrip(" 0123456789")
-        if lang == "fr" and base_pos == "nom commun":
-            gender = await extract_french_gender(pos_wikitext)
-
-        lines = extract_definition_lines(pos_wikitext, lang=lang, max_defs=50)
-
-        if debug:
-            print(f"DEBUG: pos_wikitext for {word} ({chosen_pos}):\n{pos_wikitext}\n")
-            print(f"DEBUG: extracted lines:\n{lines}\n")
-
-        defs = []
-        for ln in lines:
-            ln = ln.strip()
-            if ln.startswith("- "):
-                defs.append(ln[2:].strip())
-            elif ln.startswith("  - "):
-                defs.append(ln[4:].strip())
-
-        if not defs:
-            await ctx.send(f"No usable definitions found for **{word}** ({chosen_pos}).")
-            return
-
-        key = session_key(ctx)
-        DEFINE_SESSIONS[key] = {
-            "word": word,
-            "pos": base_pos,
-            "defs": defs,
-            "i": 0,
-            "lang": lang,
-            "gender": gender,
-        }
+        if fr_sections:
+            if debug:
+                for sec in fr_sections:
+                    print(f"DEBUG: section {sec['section']} gender={sec['gender']} defs={sec['defs']}")
+            if not any(sec["defs"] for sec in fr_sections):
+                await ctx.send(f"No usable definitions found for **{word}** ({chosen_pos}).")
+                return
+            key = session_key(ctx)
+            DEFINE_SESSIONS[key] = {
+                "word": word,
+                "pos": "nom commun",
+                "lang": lang,
+                "fr_sections": fr_sections,  # list of {section, gender, defs}
+                "i": 0,
+            }
+        else:
+            pos_wikitext = await fetch_section_wikitext(word, chosen_idx, cfg["api"])
+            base_pos = (chosen_pos or "").lower().rstrip(" 0123456789")
+            gender = None
+            if lang == "fr" and base_pos == "nom commun":
+                gender = extract_french_gender(pos_wikitext)
+            lines = extract_definition_lines(pos_wikitext, lang=lang, max_defs=50)
+            if debug:
+                print(f"DEBUG: pos_wikitext for {word} ({chosen_pos}):\n{pos_wikitext}\n")
+                print(f"DEBUG: extracted lines:\n{lines}\n")
+            defs = []
+            for ln in lines:
+                ln = ln.strip()
+                if ln.startswith("- "):
+                    defs.append(ln[2:].strip())
+                elif ln.startswith("  - "):
+                    defs.append(ln[4:].strip())
+            if not defs:
+                await ctx.send(f"No usable definitions found for **{word}** ({chosen_pos}).")
+                return
+            key = session_key(ctx)
+            DEFINE_SESSIONS[key] = {
+                "word": word,
+                "pos": base_pos,
+                "defs": defs,
+                "i": 0,
+                "lang": lang,
+                "gender": gender,
+            }
 
         await send_current_definition(ctx, DEFINE_SESSIONS[key])
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print("DEFINE ERROR:", repr(e), flush=True)
         await ctx.send("Error while fetching/parsing")
 
@@ -149,48 +206,47 @@ async def define_error(ctx, error):
 async def next(ctx):
     key = session_key(ctx)
     sess = DEFINE_SESSIONS.get(key)
-
     if not sess:
         await ctx.send("No active definition session. Use `!define <word>` first.")
         return
-
-    if not sess["defs"]:
+    total = sum(len(s["defs"]) for s in sess["fr_sections"]) if "fr_sections" in sess else len(sess.get("defs", []))
+    if not total:
         await ctx.send("Session has no definitions.")
         return
-
-    sess["i"] = (sess["i"] + 1) % len(sess["defs"])
+    sess["i"] = (sess["i"] + 1) % total
     await send_current_definition(ctx, sess)
 
 @bot.command()
 async def all(ctx):
     key = session_key(ctx)
     sess = DEFINE_SESSIONS.get(key)
-
     if not sess:
         await ctx.send("No active definition session. Use `!define <word>` first.")
         return
 
-    defs = sess["defs"]
     word = sess["word"]
-    pos = sess["pos"]
-    gender = sess.get("gender")
     gender_text = {"m": ", masculin", "f": ", féminin"}
+    flat = session_defs(sess)
 
-    numbered = "\n".join(f"**{i+1}.** {d}" for i, d in enumerate(defs))
-    msg = (
-        f"**{word}** ({pos}{gender_text.get(gender, '')}) — all {len(defs)} definition(s):\n"
-        f"{numbered}"
-    )
+    if not flat:
+        await ctx.send("Session has no definitions.")
+        return
 
-    # Discord has a 2000-char message limit — chunk if needed
+    header = f"**{word}** — all {len(flat)} definition(s):\n"
+    lines = []
+    for i, (sec_label, gender, d) in enumerate(flat):
+        g = gender_text.get(gender, "")
+        lines.append(f"**{i+1}.** ({sec_label}{g}) {d}")
+
+    numbered = "\n".join(lines)
+    msg = header + numbered
     if len(msg) <= 2000:
         await ctx.send(msg)
     else:
-        header = f"**{word}** ({pos}{gender_text.get(gender, '')}) — all {len(defs)} definition(s):\n"
         await ctx.send(header)
         chunk = ""
-        for i, d in enumerate(defs):
-            line = f"**{i+1}.** {d}\n"
+        for line in lines:
+            line += "\n"
             if len(chunk) + len(line) > 1900:
                 await ctx.send(chunk)
                 chunk = line
