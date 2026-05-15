@@ -92,13 +92,20 @@ def extract_definition_lines(pos_wikitext: str, lang, max_defs: int = 8) -> list
             content = line[2:].strip()
 
             if lang == "en":
-                # English templates
-                m = re.match(r"\{\{(alternative form of|plural of|past of|present participle of|third-person singular of|synonym of)\|en\|([^}]+)\}\}", content)
+                m = re.match(r"\{\{([^|{}]+)\|en\|([^|{}]+)([^}]*)\}\}", content)
                 if m:
-                    out.append("- " + m.group(2).strip())
-                    continue
-
-            # fallback
+                    template_name = m.group(1).strip().capitalize()
+                    base_word = m.group(2).strip()
+                    extras = m.group(3)
+                    gloss_match = re.search(r"\|t=(.*?)(?=\|[a-z]+=|\}\})", extras + "}}")
+                    if template_name.endswith(" of"):
+                        if gloss_match:
+                            gloss = clean_wikitext_line(gloss_match.group(1).strip())
+                            out.append(f"- {template_name} {base_word} (\"{gloss}\")")
+                        else:
+                            out.append(f"- {template_name} {base_word}")
+                        continue
+            # fallback runs if no match or template didn't end in " of"
             cleaned = clean_wikitext_line(content)
             if cleaned:
                 out.append("- " + cleaned)

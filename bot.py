@@ -162,6 +162,44 @@ async def next(ctx):
     await send_current_definition(ctx, sess)
 
 @bot.command()
+async def all(ctx):
+    key = session_key(ctx)
+    sess = DEFINE_SESSIONS.get(key)
+
+    if not sess:
+        await ctx.send("No active definition session. Use `!define <word>` first.")
+        return
+
+    defs = sess["defs"]
+    word = sess["word"]
+    pos = sess["pos"]
+    gender = sess.get("gender")
+    gender_text = {"m": ", masculin", "f": ", féminin"}
+
+    numbered = "\n".join(f"**{i+1}.** {d}" for i, d in enumerate(defs))
+    msg = (
+        f"**{word}** ({pos}{gender_text.get(gender, '')}) — all {len(defs)} definition(s):\n"
+        f"{numbered}"
+    )
+
+    # Discord has a 2000-char message limit — chunk if needed
+    if len(msg) <= 2000:
+        await ctx.send(msg)
+    else:
+        header = f"**{word}** ({pos}{gender_text.get(gender, '')}) — all {len(defs)} definition(s):\n"
+        await ctx.send(header)
+        chunk = ""
+        for i, d in enumerate(defs):
+            line = f"**{i+1}.** {d}\n"
+            if len(chunk) + len(line) > 1900:
+                await ctx.send(chunk)
+                chunk = line
+            else:
+                chunk += line
+        if chunk:
+            await ctx.send(chunk)
+
+@bot.command()
 @commands.is_owner()
 async def raw(ctx, lang_or_word: str, word_or_none: Optional[str] = None):
     """Fetch and display raw wikitext for a word — for debugging parse issues."""
