@@ -226,7 +226,9 @@ async def all(ctx):
 
     word = sess["word"]
     sec_label = sess["pos"]
-    gender = sess.get("gender")
+    if "fr_sections" in sess:
+        gender = sess["fr_sections"][0].get("gender")
+        print(gender)
     gender_text = {"m": ", masculin", "f": ", féminin"}
     flat = session_defs(sess)
 
