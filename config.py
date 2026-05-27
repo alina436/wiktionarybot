@@ -30,6 +30,11 @@ LANG_CONFIG = {
 }
 
 # Parsing regexes
+# Matches [[File:...]] / [[Fichier:...]], handling one level of nested [[...]]
+FILE_LINK_RE = re.compile(
+    r'\[\[(File|Fichier):[^\[]*(?:\[\[[^\]]*\]\][^\[]*)*\]\]',
+    re.IGNORECASE
+)
 LINK_RE = re.compile(r"\[\[([^|\]]+)\|([^\]]+)\]\]|\[\[([^\]]+)\]\]")
 LIEN_FR_RE = re.compile(r"\{\{\s*lien\s*\|\s*([^|}]+)\s*\|\s*fr\s*\}\}", re.IGNORECASE)
 TAXFMT_RE = re.compile(r"\{\{taxfmt\|([^|}]+)(?:\|[^}]*)?\}\}")
