@@ -98,6 +98,9 @@ def clean_wikitext_line(s: str) -> str:
     # English taxonomic names
     s = TAXFMT_RE.sub(r"\1", s)
     
+    # HTML comments (e.g. inline source notes)
+    s = re.sub(r"<!--.*?-->", "", s, flags=re.DOTALL)
+
     # references
     s = re.sub(r"<ref[^>]*>.*?</ref>", "", s, flags=re.DOTALL)
     s = re.sub(r"<ref[^>]*/>", "", s)
@@ -106,6 +109,12 @@ def clean_wikitext_line(s: str) -> str:
     for _ in range(3):
         s = TEMPLATE_RE.sub("", s)
 
+    # Bold markers: drop them but keep the text.
+    s = re.sub(r"'''(.+?)'''", r"\1", s)
+    # Italics: convert to Discord italics (*text*) so they render.
+    s = re.sub(r"''(.+?)''", r"*\1*", s)
+    s = re.sub(r"<i>(.*?)</i>", r"*\1*", s, flags=re.IGNORECASE | re.DOTALL)
+    # Drop any leftover unbalanced quote markers.
     s = s.replace("'''", "").replace("''", "")
     s = re.sub(r"\(\s*\)", "", s)
     s = re.sub(r"\s+", " ", s).strip()
@@ -137,20 +146,39 @@ def extract_definition_lines(pos_wikitext: str, lang, max_defs: int = 8) -> list
             content = line[2:].strip()
 
             if lang == "en":
-                m = re.match(r"\{\{([^|{}]+)\|en\|([^|{}]+)([^}]*)\}\}", content)
-                if m:
-                    template_name = m.group(1).strip().capitalize()
-                    base_word = m.group(2).strip()
-                    extras = m.group(3)
-                    gloss_match = re.search(r"\|t=(.*?)(?=\|[a-z]+=|\}\})", extras + "}}")
-                    if template_name.endswith(" of"):
-                        if gloss_match:
-                            gloss = clean_wikitext_line(gloss_match.group(1).strip())
+                # Drop leading bookkeeping templates (e.g. {{senseid|en|...}})
+                # that sit before the actual definition.
+                content = re.sub(
+                    r"^\s*\{\{senseid\|[^{}]*\}\}\s*", "", content, flags=re.IGNORECASE
+                )
+                # Form-of definitions: {{<name> of|en|<base>|...}}, tolerating
+                # named params like from=US between the lang code and base word.
+                of_match = re.search(r"\{\{([^|{}]+ of)\|en\|([^{}]*)\}\}", content)
+                if of_match:
+                    template_name = of_match.group(1).strip().capitalize()
+                    params = of_match.group(2).split("|")
+                    positional = [p.strip() for p in params if p and "=" not in p]
+                    named = dict(p.split("=", 1) for p in params if "=" in p)
+                    base_word = positional[0] if positional else ""
+                    gloss = named.get("t") or named.get("gloss")
+                    # Regional qualifier: {{alternative spelling of|en|from=US|...}}
+                    # renders as "US spelling of ...". Multiple froms join with " and ".
+                    froms = [
+                        named[k].strip()
+                        for k in ("from", "from2", "from3", "from4")
+                        if named.get(k, "").strip()
+                    ]
+                    if froms and template_name.lower().startswith("alternative "):
+                        rest = template_name.split(" ", 1)[1]
+                        template_name = f"{' and '.join(froms)} {rest}"
+                    if base_word:
+                        if gloss:
+                            gloss = clean_wikitext_line(gloss.strip())
                             out.append(f"- {template_name} {base_word} (\"{gloss}\")")
                         else:
                             out.append(f"- {template_name} {base_word}")
                         continue
-            # fallback runs if no match or template didn't end in " of"
+            # fallback runs if no match or not a form-of template
             cleaned = clean_wikitext_line(content)
             if cleaned:
                 out.append("- " + cleaned)
