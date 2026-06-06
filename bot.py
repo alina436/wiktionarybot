@@ -9,7 +9,7 @@ from discord.ext import commands
 
 from config import LANG_CONFIG
 from wiktionary_client import get_sections, fetch_section_wikitext
-from parse import normalize_lang, normalize_pos, find_language_pos_section_index, find_language_pos_section_indices, extract_definition_lines, extract_french_gender, strip_html, build_french_noun_sections
+from parse import normalize_lang, normalize_pos, find_language_pos_section_index, find_language_pos_section_indices, extract_definition_lines, extract_french_gender, extract_ipa, strip_html, build_french_noun_sections
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -41,6 +41,9 @@ async def send_current_definition(ctx, sess):
     i = sess["i"]
     gender_text = {"m": ", masculin", "f": ", féminin"}
 
+    def ipa_str(ipa):
+        return f" {ipa}" if ipa else ""
+
     if "fr_sections" in sess:
         offset = 0
         for sec in sess["fr_sections"]:
@@ -48,9 +51,10 @@ async def send_current_definition(ctx, sess):
             if i < offset + len(sec_defs):
                 local_i = i - offset
                 gender = sec.get("gender")
+                ipa = sec.get("ipa")
                 total = sum(len(s["defs"]) for s in sess["fr_sections"])
                 msg = (
-                    f"**{word}** ({sec['section']}{gender_text.get(gender, '')}) [{i+1}/{total}]\n"
+                    f"**{word}**{ipa_str(ipa)} ({sec['section']}{gender_text.get(gender, '')}) [{i+1}/{total}]\n"
                     f"{sec_defs[local_i]}\n"
                 )
                 await ctx.send(msg)
@@ -61,11 +65,12 @@ async def send_current_definition(ctx, sess):
 
     defs = sess["defs"]
     gender = sess.get("gender")
+    ipa = sess.get("ipa")
     if not defs:
         await ctx.send(f"No definitions stored for **{word}** ({pos}).")
         return
     msg = (
-        f"**{word}** ({pos}{gender_text.get(gender, '')}) [{i+1}/{len(defs)}]\n"
+        f"**{word}**{ipa_str(ipa)} ({pos}{gender_text.get(gender, '')}) [{i+1}/{len(defs)}]\n"
         f"{defs[i]}\n"
     )
     await ctx.send(msg)
@@ -108,6 +113,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
         chosen_pos = None
         chosen_idx = None
 
+        
         if is_fr_noun:
             for p in pos_try_order:
                 matches = find_language_pos_section_indices(sections, cfg["lang_header"], p)
@@ -152,11 +158,17 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
                 await ctx.send(f"No usable definitions found for **{word}** ({chosen_pos}).")
                 return
             key = session_key(ctx)
+            first_ipa = None
+            for s in fr_sections:
+                if s.get("ipa"):
+                    first_ipa = s["ipa"]
+                    break
             DEFINE_SESSIONS[key] = {
                 "word": word,
                 "pos": "nom commun",
                 "lang": lang,
-                "fr_sections": fr_sections,  # list of {section, gender, defs}
+                "fr_sections": fr_sections,  # list of {section, gender, ipa, defs}
+                "ipa": first_ipa,
                 "i": 0,
             }
         else:
@@ -165,6 +177,14 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
             gender = None
             if lang == "fr" and base_pos == "nom commun":
                 gender = extract_french_gender(pos_wikitext)
+            ipa = None
+            if lang == "fr":
+                ipa = extract_ipa(pos_wikitext, "fr")
+            elif lang == "en":
+                pron_idx = find_language_pos_section_index(sections, cfg["lang_header"], "Pronunciation")
+                if pron_idx:
+                    pron_wikitext = await fetch_section_wikitext(word, pron_idx, cfg["api"])
+                    ipa = extract_ipa(pron_wikitext, "en")
             lines = extract_definition_lines(pos_wikitext, lang=lang, max_defs=50)
             if debug:
                 print(f"DEBUG: pos_wikitext for {word} ({chosen_pos}):\n{pos_wikitext}\n")
@@ -187,6 +207,7 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
                 "i": 0,
                 "lang": lang,
                 "gender": gender,
+                "ipa": ipa,
             }
 
         await send_current_definition(ctx, DEFINE_SESSIONS[key])
@@ -236,7 +257,9 @@ async def all(ctx):
         await ctx.send("Session has no definitions.")
         return
 
-    header = f"**{word}** ({sec_label}{gender_text.get(gender, '')})\n" if "fr_sections" in sess else f"**{word}** ({sec_label})\n"
+    ipa = sess.get("ipa")
+    ipa_part = f" {ipa}" if ipa else ""
+    header = f"**{word}**{ipa_part} ({sec_label}{gender_text.get(gender, '')})\n"
     lines = []
     for i, (sec_label, gender, d) in enumerate(flat):
         lines.append(f"{i+1}. {d}")

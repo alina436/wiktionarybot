@@ -2,7 +2,7 @@
 import re
 from typing import Optional
 
-from config import FR_GENDER_RE, FR_LABEL_RE, LINK_RE, LIEN_FR_RE, TAXFMT_RE, TEMPLATE_RE, HTML_TAG_RE, LANG_CONFIG, FR_LABEL_MAP
+from config import FR_GENDER_RE, FR_LABEL_RE, FILE_LINK_RE, LINK_RE, LIEN_FR_RE, TAXFMT_RE, TEMPLATE_RE, HTML_TAG_RE, LANG_CONFIG, FR_LABEL_MAP
 
 def normalize_lang(s: Optional[str]) -> Optional[str]:
     if not s:
@@ -72,6 +72,7 @@ def build_french_noun_sections(section_wikitexts: list[tuple[str, str]], max_def
         results.append({
             "section": header.lower(),
             "gender": extract_french_gender(wikitext),
+            "ipa": extract_ipa(wikitext, "fr"),
             "defs": defs,
         })
     return results
@@ -81,9 +82,11 @@ def clean_wikitext_line(s: str) -> str:
         if m.group(2):
             return m.group(2)
         return m.group(1) or m.group(3) or ""
-    
+
     def label_repl(m):
         return f"({m.group(1)})"
+
+    s = FILE_LINK_RE.sub("", s)
 
     s = FR_LABEL_RE.sub(label_repl, s)
 
@@ -162,3 +165,15 @@ def extract_french_gender(pos_wikitext: str) -> Optional[str]:
     top = "\n".join(pos_wikitext.splitlines()[:20])
     m = FR_GENDER_RE.search(top)
     return m.group(1).lower() if m else None
+
+def extract_ipa(wikitext: str, lang: str) -> Optional[str]:
+    if lang == "fr":
+        m = re.search(r"\{\{pron\|([^|{}]+)\|fr\}\}", wikitext, re.IGNORECASE)
+        if m:
+            return f"/{m.group(1).strip()}/"
+    elif lang == "en":
+        # {{IPA|en|/ˈæpəl/|...}} — grab the first /…/ parameter
+        m = re.search(r"\{\{IPA\|en\|(/[^/|{}]+/)", wikitext, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return None
