@@ -3,6 +3,20 @@ import requests
 import asyncio
 from config import HEADERS
 
+
+class PageNotFoundError(Exception):
+    """Raised when Wiktionary has no page for the requested word."""
+    def __init__(self, word: str):
+        self.word = word
+        super().__init__(f"Wiktionary has no page for '{word}'.")
+
+
+def _raise_for_api_error(error: dict, word: str) -> None:
+    if error.get("code") == "missingtitle":
+        raise PageNotFoundError(word)
+    raise ValueError(f"Wiktionary: {error.get('info', 'unknown error')}")
+
+
 def _get_sections_sync(word: str, api_url: str) -> list:
     params = {
         "action": "parse",
@@ -15,7 +29,7 @@ def _get_sections_sync(word: str, api_url: str) -> list:
     r.raise_for_status()
     data = r.json()
     if "error" in data:
-        raise ValueError(f"Wiktionary: {data['error'].get('info', 'unknown error')}")
+        _raise_for_api_error(data["error"], word)
     return data["parse"]["sections"]
 
 def _fetch_section_wikitext_sync(word: str, section_index: str, api_url: str) -> str:
@@ -31,7 +45,7 @@ def _fetch_section_wikitext_sync(word: str, section_index: str, api_url: str) ->
     r.raise_for_status()
     data = r.json()
     if "error" in data:
-        raise ValueError(f"Wiktionary: {data['error'].get('info', 'unknown error')}")
+        _raise_for_api_error(data["error"], word)
     return data["parse"]["wikitext"]["*"]
 
 async def get_sections(word: str, api_url: str) -> list:

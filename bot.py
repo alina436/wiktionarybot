@@ -8,7 +8,7 @@ import discord
 from discord.ext import commands
 
 from config import LANG_CONFIG
-from wiktionary_client import get_sections, fetch_section_wikitext
+from wiktionary_client import get_sections, fetch_section_wikitext, PageNotFoundError
 from parse import normalize_lang, normalize_pos, find_language_pos_section_index, find_language_pos_section_indices, extract_definition_lines, extract_french_gender, extract_ipa, strip_html, build_french_noun_sections
 
 intents = discord.Intents.default()
@@ -212,11 +212,13 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
 
         await send_current_definition(ctx, DEFINE_SESSIONS[key])
 
+    except PageNotFoundError:
+        await ctx.send(f"No Wiktionary page found for **{word}**. Check the spelling?")
     except Exception as e:
         import traceback
         traceback.print_exc()
         print("DEFINE ERROR:", repr(e), flush=True)
-        await ctx.send("Error while fetching/parsing")
+        await ctx.send("Error while fetching/parsing. The developer might need to fix the parser for this case :/")
 
 @define.error
 async def define_error(ctx, error):
@@ -249,7 +251,8 @@ async def all(ctx):
     sec_label = sess["pos"]
     if "fr_sections" in sess:
         gender = sess["fr_sections"][0].get("gender")
-        print(gender)
+    else:
+        gender = None
     gender_text = {"m": ", masculin", "f": ", féminin"}
     flat = session_defs(sess)
 
@@ -259,7 +262,7 @@ async def all(ctx):
 
     ipa = sess.get("ipa")
     ipa_part = f" {ipa}" if ipa else ""
-    header = f"**{word}**{ipa_part} ({sec_label}{gender_text.get(gender, '')})\n"
+    header = f"**{word}**{ipa_part} ({sec_label}{gender_text.get(gender, '')})\n" if gender else f"**{word}**{ipa_part} ({sec_label})\n"
     lines = []
     for i, (sec_label, gender, d) in enumerate(flat):
         lines.append(f"{i+1}. {d}")
