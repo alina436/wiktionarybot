@@ -236,7 +236,7 @@ async def all(ctx):
         await ctx.send("Session has no definitions.")
         return
 
-    header = f"**{word}** ({sec_label}{gender_text.get(gender, '')})\n"
+    header = f"**{word}** ({sec_label}{gender_text.get(gender, '')})\n" if "fr_sections" in sess else f"**{word}** ({sec_label})\n"
     lines = []
     for i, (sec_label, gender, d) in enumerate(flat):
         lines.append(f"{i+1}. {d}")
