@@ -150,6 +150,12 @@ async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str]
                     chosen_idx = idx
                     break
 
+        # No section for the requested language — bail out before falling
+        # through to a whole-page fetch (which would scrape other languages).
+        if not fr_sections and not chosen_idx:
+            await ctx.send(f"No {cfg['lang_header']} entry found for **{word}**.")
+            return
+
         if fr_sections:
             if debug:
                 for sec in fr_sections:
