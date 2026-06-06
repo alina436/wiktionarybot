@@ -2,7 +2,7 @@
 import re
 from typing import Optional
 
-HEADERS = {"User-Agent": "DiscordBot/1.0 (learning project)"}
+HEADERS = {"User-Agent": "DiscordWiktionaryBot/1.0 (alge424@gmail.com) requests/2.32.5"}
 
 LANG_CONFIG = {
     "en": {
