@@ -84,7 +84,8 @@ def clean_wikitext_line(s: str) -> str:
         return m.group(1) or m.group(3) or ""
 
     def label_repl(m):
-        return f"({m.group(1)})"
+        label = m.group(1) or m.group(2)
+        return f"({label})"
 
     s = FILE_LINK_RE.sub("", s)
 

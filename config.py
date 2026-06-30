@@ -42,7 +42,9 @@ TEMPLATE_RE = re.compile(r"\{\{[^{}]*\}\}")
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 FR_GENDER_RE = re.compile(r"\{\{\s*(m|f|mf)\s*\}\}", re.IGNORECASE)
 FR_LABEL_RE = re.compile(
-    r"\{\{\s*([^|{}]+?)\s*\|\s*fr\s*\}\}",
+    r"\{\{\s*lexique\s*\|\s*([^|{}]+?)\s*\|\s*fr\s*\}\}"   # {{lexique|sexualité|fr}}
+    r"|"
+    r"\{\{\s*([^|{}]+?)\s*\|\s*fr\s*\}\}",                  # {{label|fr}}
     re.IGNORECASE
 )
 
