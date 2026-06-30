@@ -77,7 +77,7 @@ def build_french_noun_sections(section_wikitexts: list[tuple[str, str]], max_def
         })
     return results
 
-def clean_wikitext_line(s: str) -> str:
+def clean_wikitext_line(s: str, lang:str) -> str:
     def link_repl(m):
         if m.group(2):
             return m.group(2)
@@ -89,15 +89,14 @@ def clean_wikitext_line(s: str) -> str:
 
     s = FILE_LINK_RE.sub("", s)
 
-    s = FR_LABEL_RE.sub(label_repl, s)
+    if lang == "fr":
+        s = FR_LABEL_RE.sub(label_repl, s)
+        s = LIEN_FR_RE.sub(r"\1", s)    # {{lien|word|fr}} keep the word
+
+    if lang == "en":
+        s = TAXFMT_RE.sub(r"\1", s) # English taxonomic names
 
     s = LINK_RE.sub(link_repl, s)
-
-    # French {{lien|word|fr}} keep the word
-    s = LIEN_FR_RE.sub(r"\1", s)
-
-    # English taxonomic names
-    s = TAXFMT_RE.sub(r"\1", s)
     
     # HTML comments (e.g. inline source notes)
     s = re.sub(r"<!--.*?-->", "", s, flags=re.DOTALL)
@@ -105,6 +104,9 @@ def clean_wikitext_line(s: str) -> str:
     # references
     s = re.sub(r"<ref[^>]*>.*?</ref>", "", s, flags=re.DOTALL)
     s = re.sub(r"<ref[^>]*/>", "", s)
+
+    # {{note}}
+    s = re.sub(r"\{\{\s*note\s*\}\}", "Note:", s, flags=re.IGNORECASE)
 
     # remove remaining templates
     for _ in range(3):
@@ -174,13 +176,13 @@ def extract_definition_lines(pos_wikitext: str, lang, max_defs: int = 8) -> list
                         template_name = f"{' and '.join(froms)} {rest}"
                     if base_word:
                         if gloss:
-                            gloss = clean_wikitext_line(gloss.strip())
+                            gloss = clean_wikitext_line(gloss.strip(), lang)
                             out.append(f"- {template_name} {base_word} (\"{gloss}\")")
                         else:
                             out.append(f"- {template_name} {base_word}")
                         continue
             # fallback runs if no match or not a form-of template
-            cleaned = clean_wikitext_line(content)
+            cleaned = clean_wikitext_line(content, lang)
             if cleaned:
                 out.append("- " + cleaned)
 
