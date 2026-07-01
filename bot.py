@@ -16,7 +16,7 @@ intents.message_content = True
 
 debug = False
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", help_command=None, intents=intents)
 
 # key: (guild_id, channel_id)
 DEFINE_SESSIONS = {}
@@ -78,6 +78,20 @@ async def send_current_definition(ctx, sess):
 @bot.command()
 async def ping(ctx):
     await ctx.send("pong")
+
+@bot.command()
+async def help(ctx):
+    await ctx.send(
+        "Commands:\n"
+        "`!define <word>` — define a word (English)\n"
+        "`!define <lang> <word> [pos]` — specify language (en, fr) and optional part of speech\n"
+        "`!next` — show next definition in the current session\n"
+        "`!all` — show all definitions in the current session\n"
+        "\n"
+        "Helpful notes:\n"
+        "- [pos] options: noun (n), verb (v), adjective (adj, a), adverb (adv)\n"
+        "- If your entry includes a space, wrap it in quotes: `!define \"ice cream\"`\n"
+    )
 
 @bot.command()
 async def define(ctx, arg1: str, arg2: Optional[str] = None, arg3: Optional[str] = None):
